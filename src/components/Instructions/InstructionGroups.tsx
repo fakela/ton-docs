@@ -42,59 +42,90 @@ const sections = [
   { label: 'Aliases', types: null, value: 'alias' },
 ];
 
-export const InstructionGroups = React.memo(({ instructions, aliases, search }: InstructionGroupsProps) => {
-  const aliasesWithInstructions = useMemo(() => {
-    const instructionsByMnemonic = instructions.reduce((acc, instruction) => {
-      acc[instruction.mnemonic] = instruction;
-      return acc;
-    }, {});
-    return aliases.map((alias) => ({ ...alias, instruction: instructionsByMnemonic[alias.alias_of] }));
-  }, [instructions]);
+export const InstructionGroups = React.memo(
+  ({ instructions, aliases = [], search = '' }: InstructionGroupsProps) => {
+    const aliasesWithInstructions = useMemo(() => {
+      const byMnemonic: Record<string, Instruction> = {};
+      instructions.forEach((inst) => {
+        byMnemonic[inst.mnemonic] = inst;
+      });
+      return aliases.map((alias) => ({
+        ...alias,
+        instruction: byMnemonic[alias.alias_of],
+      }));
+    }, [instructions, aliases]);
 
-  const searchValue = search.toLowerCase();
+    const searchValue = search.toLowerCase();
 
-  const filteredInstructions = useMemo(() => instructions.filter(
-    (item) =>
-      item.doc?.opcode?.toLowerCase()?.includes(searchValue) ||
-      item.doc?.fift?.toLowerCase()?.includes(searchValue) ||
-      item?.doc?.description?.toLowerCase()?.includes(searchValue),
-  ), [searchValue]);
+    const filteredInstructions = useMemo(
+      () =>
+        instructions.filter(
+          (inst) =>
+            inst.doc.opcode.toLowerCase().includes(searchValue) ||
+            inst.doc.fift.toLowerCase().includes(searchValue) ||
+            inst.doc.description.toLowerCase().includes(searchValue),
+        ),
+      [instructions, searchValue],
+    );
 
-  const filteredAliases = useMemo(() => aliasesWithInstructions.filter(
-    (item) =>
-      item.mnemonic?.toLowerCase()?.includes(searchValue) ||
-      item.description?.toLowerCase()?.includes(searchValue) ||
-      item.doc_fift?.toLowerCase()?.includes(searchValue),
-  ), [searchValue]);
+    const filteredAliases = useMemo(
+      () =>
+        aliasesWithInstructions.filter(
+          (alias) =>
+            alias.mnemonic.toLowerCase().includes(searchValue) ||
+            alias.doc_fift.toLowerCase().includes(searchValue) ||
+            alias.description.toLowerCase().includes(searchValue),
+        ),
+      [aliasesWithInstructions, searchValue],
+    );
 
-  return <Tabs>
-    {
-      sections.map(({ label, types, value }) => {
-        if (value === 'alias') {
-          return filteredAliases?.length ? <TabItem label={label} value={value} key={value}>
-            <InstructionTable instructions={filteredAliases.map((alias) => ({
-              opcode: alias.instruction?.doc?.opcode,
-              fift: alias.doc_fift,
-              gas: alias.instruction?.doc?.gas,
-              description: alias.description,
-              stack: alias.doc_stack,
-            }))}/>
-          </TabItem> : null;
-        }
+    const activeTab = useMemo(() => {
+      if (filteredAliases.length > 0 && filteredInstructions.length === 0) {
+        return 'alias';
+      }
+      return 'all';
+    }, [filteredAliases, filteredInstructions]);
 
-        const tabInstructions = types ? filteredInstructions.filter(instruction => types.includes(instruction.doc.category)) : filteredInstructions;
-        return (tabInstructions?.length ?
-          <TabItem label={label} value={value} key={value}>
-            <InstructionTable
-              instructions={tabInstructions.map(instruction => ({
-                opcode: instruction.doc?.opcode,
-                fift: instruction.doc?.fift,
-                gas: instruction.doc?.gas,
-                description: instruction?.doc.description,
-                stack: instruction.doc?.stack,
-              }))}/>
-          </TabItem> : null);
-      })
-    }
-  </Tabs>;
-});
+    return (
+      <Tabs key={activeTab} defaultValue={activeTab}>
+        {sections.map(({ label, types, value }) => {
+          if (value === 'alias') {
+            if (!filteredAliases.length) return null;
+            return (
+              <TabItem label={label} value={value} key={value}>
+                <InstructionTable
+                  instructions={filteredAliases.map((alias) => ({
+                    opcode: alias.instruction?.doc.opcode,
+                    fift: alias.doc_fift,
+                    gas: alias.instruction?.doc.gas,
+                    description: alias.description,
+                    stack: alias.doc_stack,
+                  }))}
+                />
+              </TabItem>
+            );
+          }
+
+          const tabInstructions = types
+            ? filteredInstructions.filter((inst) => types.includes(inst.doc.category))
+            : filteredInstructions;
+
+          if (!tabInstructions.length) return null;
+          return (
+            <TabItem label={label} value={value} key={value}>
+              <InstructionTable
+                instructions={tabInstructions.map((inst) => ({
+                  opcode: inst.doc.opcode,
+                  fift: inst.doc.fift,
+                  gas: inst.doc.gas,
+                  description: inst.doc.description,
+                  stack: inst.doc.stack,
+                }))}
+              />
+            </TabItem>
+          );
+        })}
+      </Tabs>
+    );
+  },
+);
